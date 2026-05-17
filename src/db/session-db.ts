@@ -91,6 +91,10 @@ export function nextEvenSeq(db: Database.Database): number {
   return maxSeq < 2 ? 2 : maxSeq + 2 - (maxSeq % 2);
 }
 
+/**
+ * Insert a message into inbound.db. Returns true if inserted, false if
+ * the message ID already existed (dedup on adapter replay after restart).
+ */
 export function insertMessage(
   db: Database.Database,
   message: {
@@ -120,17 +124,20 @@ export function insertMessage(
      */
     onWake?: 0 | 1;
   },
-): void {
-  db.prepare(
-    `INSERT INTO messages_in (id, seq, kind, timestamp, status, platform_id, channel_type, thread_id, content, process_after, recurrence, series_id, trigger, source_session_id, on_wake)
+): boolean {
+  const result = db
+    .prepare(
+      `INSERT OR IGNORE INTO messages_in (id, seq, kind, timestamp, status, platform_id, channel_type, thread_id, content, process_after, recurrence, series_id, trigger, source_session_id, on_wake)
      VALUES (@id, @seq, @kind, @timestamp, 'pending', @platformId, @channelType, @threadId, @content, @processAfter, @recurrence, @id, @trigger, @sourceSessionId, @onWake)`,
-  ).run({
-    ...message,
-    trigger: message.trigger ?? 1,
-    onWake: message.onWake ?? 0,
-    sourceSessionId: message.sourceSessionId ?? null,
-    seq: nextEvenSeq(db),
-  });
+    )
+    .run({
+      ...message,
+      trigger: message.trigger ?? 1,
+      onWake: message.onWake ?? 0,
+      sourceSessionId: message.sourceSessionId ?? null,
+      seq: nextEvenSeq(db),
+    });
+  return result.changes > 0;
 }
 
 export function countDueMessages(db: Database.Database): number {

@@ -447,7 +447,7 @@ async function deliverToAgent(
     }
   }
 
-  writeSessionMessage(session.agent_group_id, session.id, {
+  const inserted = writeSessionMessage(session.agent_group_id, session.id, {
     id: messageIdForAgent(event.message.id, agent.agent_group_id),
     kind: event.message.kind,
     timestamp: event.message.timestamp,
@@ -457,6 +457,11 @@ async function deliverToAgent(
     content: event.message.content,
     trigger: wake ? 1 : 0,
   });
+
+  if (!inserted) {
+    // Duplicate message from adapter replay after restart — already in DB.
+    return;
+  }
 
   log.info('Message routed', {
     sessionId: session.id,

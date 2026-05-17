@@ -95,6 +95,19 @@ export function deleteSession(id: string): void {
   getDb().prepare('DELETE FROM sessions WHERE id = ?').run(id);
 }
 
+/**
+ * Reset all container_status to 'stopped'. Called at host startup after
+ * cleanupOrphans() kills all Docker containers — brings the DB in sync
+ * with the empty in-memory activeContainers map so the host sweep doesn't
+ * skip wake calls for sessions it thinks are still running.
+ */
+export function resetAllContainerStatuses(): number {
+  const result = getDb()
+    .prepare("UPDATE sessions SET container_status = 'stopped' WHERE container_status != 'stopped'")
+    .run();
+  return result.changes;
+}
+
 // ── Pending Questions ──
 
 /**

@@ -185,6 +185,8 @@ export function writeSessionRouting(agentGroupId: string, sessionId: string): vo
 
 /**
  * Write a message to a session's inbound DB (messages_in). Host-only.
+ * Returns true if written, false if the message was a duplicate (already
+ * existed with the same id — e.g. adapter replay after restart).
  *
  * ⚠ Opens and closes the DB on every call. Do not refactor to reuse a
  * long-lived connection — see the "Cross-mount visibility invariants" note
@@ -222,13 +224,14 @@ export function writeSessionMessage(
      */
     onWake?: 0 | 1;
   },
-): void {
+): boolean {
   // Extract base64 attachment data, save to inbox, replace with file paths
   const content = extractAttachmentFiles(agentGroupId, sessionId, message.id, message.content);
 
   const db = openInboundDb(agentGroupId, sessionId);
+  let inserted: boolean;
   try {
-    insertMessage(db, {
+    inserted = insertMessage(db, {
       id: message.id,
       kind: message.kind,
       timestamp: message.timestamp,
@@ -246,7 +249,13 @@ export function writeSessionMessage(
     db.close();
   }
 
-  updateSession(sessionId, { last_active: new Date().toISOString() });
+  if (inserted) {
+    updateSession(sessionId, { last_active: new Date().toISOString() });
+  } else {
+    log.debug('Duplicate message suppressed', { messageId: message.id, sessionId });
+  }
+
+  return inserted;
 }
 
 /**
