@@ -230,16 +230,15 @@ describe('watchdog state persistence', () => {
 });
 
 describe('startHostWatchdog — degraded startup', () => {
-  const deliver =
-    vi.fn<
-      (
-        channelType: string,
-        platformId: string,
-        threadId: string | null,
-        kind: string,
-        content: string,
-      ) => Promise<string | undefined>
-    >(async () => undefined);
+  const deliver = vi.fn<
+    (
+      channelType: string,
+      platformId: string,
+      threadId: string | null,
+      kind: string,
+      content: string,
+    ) => Promise<string | undefined>
+  >(async () => undefined);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -291,9 +290,7 @@ describe('startHostWatchdog — degraded startup', () => {
     await vi.waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
     // The tick persists state after sending; wait for it so the restarted
     // watchdog sees the prior down state (persistence is the contract).
-    await vi.waitFor(() =>
-      expect(fs.existsSync(path.join(TMP_DATA_DIR, 'watchdog-state.json'))).toBe(true),
-    );
+    await vi.waitFor(() => expect(fs.existsSync(path.join(TMP_DATA_DIR, 'watchdog-state.json'))).toBe(true));
     stopHostWatchdog();
 
     // Runtime comes back; state survived on disk.
@@ -312,9 +309,7 @@ describe('startHostWatchdog — degraded startup', () => {
     vi.mocked(isContainerRuntimeUp).mockReturnValue(false);
 
     startHostWatchdog();
-    await vi.waitFor(() =>
-      expect(fs.existsSync(path.join(TMP_DATA_DIR, 'host-heartbeat'))).toBe(true),
-    );
+    await vi.waitFor(() => expect(fs.existsSync(path.join(TMP_DATA_DIR, 'host-heartbeat'))).toBe(true));
     expect(deliver).not.toHaveBeenCalled();
   });
 });

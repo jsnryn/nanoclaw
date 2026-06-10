@@ -210,11 +210,7 @@ interface AlertDestination {
 }
 
 function getWatchdogAlertDestination(): AlertDestination | null {
-  const env = readEnvFile([
-    'WATCHDOG_ALERT_CHANNEL_TYPE',
-    'WATCHDOG_ALERT_PLATFORM_ID',
-    'WATCHDOG_ALERT_THREAD_ID',
-  ]);
+  const env = readEnvFile(['WATCHDOG_ALERT_CHANNEL_TYPE', 'WATCHDOG_ALERT_PLATFORM_ID', 'WATCHDOG_ALERT_THREAD_ID']);
   const channelType = process.env.WATCHDOG_ALERT_CHANNEL_TYPE || env.WATCHDOG_ALERT_CHANNEL_TYPE;
   const platformId = process.env.WATCHDOG_ALERT_PLATFORM_ID || env.WATCHDOG_ALERT_PLATFORM_ID;
   if (!channelType || !platformId) return null;
