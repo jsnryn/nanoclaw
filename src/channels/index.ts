@@ -5,5 +5,10 @@
 // channel. Other channel skills (/add-slack, /add-discord, /add-whatsapp,
 // ...) copy their module from the `channels` branch and append a
 // self-registration import below.
+//
+// DO NOT re-add iMessage. It was removed intentionally on 2026-05-17 —
+// approval routing is consolidated on Discord, and iMessage was creating
+// noise (unregistered senders, dropped messages, dupe owner roles).
 
 import './cli.js';
+import './discord.js';
