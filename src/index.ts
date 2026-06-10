@@ -12,10 +12,9 @@ import { enforceStartupBackoff, resetCircuitBreaker } from './circuit-breaker.js
 import { migrateGroupsToClaudeLocal } from './claude-md-compose.js';
 import { initDb } from './db/connection.js';
 import { runMigrations } from './db/migrations/index.js';
-import { ensureContainerRuntimeRunning, cleanupOrphans } from './container-runtime.js';
-import { resetAllContainerStatuses } from './db/sessions.js';
 import { startActiveDeliveryPoll, startSweepDeliveryPoll, setDeliveryAdapter, stopDeliveryPolls } from './delivery.js';
 import { startHostSweep, stopHostSweep } from './host-sweep.js';
+import { startHostWatchdog, stopHostWatchdog } from './host-watchdog.js';
 import { routeInbound } from './router.js';
 import { log } from './log.js';
 
@@ -83,15 +82,16 @@ async function main(): Promise<void> {
   // 1c. One-time filesystem cutover — idempotent, no-op after first run.
   migrateGroupsToClaudeLocal();
 
-  // 2. Container runtime
-  ensureContainerRuntimeRunning();
-  cleanupOrphans();
-  const resetCount = resetAllContainerStatuses();
-  if (resetCount > 0) {
-    log.info('Reset stale container statuses after orphan cleanup', { count: resetCount });
-  }
-
-  // 3. Channel adapters
+  // 2. Channel adapters.
+  //
+  // Deliberately BEFORE any container-runtime check: when the runtime is
+  // down, the host must still come up far enough to alert out-of-band
+  // (F0). The old order (fatal runtime check at step 2, adapters at step 3)
+  // is why the May 30 Docker outage was silent — the process died before
+  // the Discord adapter existed. Runtime state is now owned by the host
+  // watchdog, started at the end of the sequence; on the runtime's
+  // up-edge (including healthy boots) it runs the orphan cleanup and
+  // container-status reset that used to live here.
   await initChannelAdapters((adapter: ChannelAdapter): ChannelSetup => {
     return {
       onInbound(platformId, threadId, message) {
@@ -146,7 +146,7 @@ async function main(): Promise<void> {
     };
   });
 
-  // 4. Delivery adapter bridge — dispatches to channel adapters
+  // 3. Delivery adapter bridge — dispatches to channel adapters
   const deliveryAdapter = {
     async deliver(
       channelType: string,
@@ -170,17 +170,24 @@ async function main(): Promise<void> {
   };
   setDeliveryAdapter(deliveryAdapter);
 
-  // 5. Start delivery polls
+  // 4. Start delivery polls
   startActiveDeliveryPoll();
   startSweepDeliveryPoll();
   log.info('Delivery polls started');
 
-  // 6. Start host sweep
+  // 5. Start host sweep
   startHostSweep();
   log.info('Host sweep started');
 
-  // 7. Start the `ncl` CLI socket server (data/ncl.sock).
+  // 6. Start the `ncl` CLI socket server (data/ncl.sock).
   await startCliServer();
+
+  // 7. Host watchdog — runtime probe, work-starvation detection, heartbeat,
+  // out-of-band alerts. Started last so the delivery adapter is in place
+  // for its first tick. wakeContainer already returns false (not throw) on
+  // spawn failure, so a degraded runtime leaves messages pending for the
+  // sweep to retry — no further guards needed here.
+  startHostWatchdog();
 
   log.info('NanoClaw running');
 }
@@ -197,6 +204,7 @@ async function shutdown(signal: string): Promise<void> {
   }
   stopDeliveryPolls();
   stopHostSweep();
+  stopHostWatchdog();
   await stopCliServer();
   try {
     await teardownChannelAdapters();

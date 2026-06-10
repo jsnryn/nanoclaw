@@ -33,6 +33,22 @@ export function stopContainer(name: string): void {
   execSync(`${CONTAINER_RUNTIME_BIN} stop -t 1 ${name}`, { stdio: 'pipe' });
 }
 
+/**
+ * Non-fatal runtime probe for the host watchdog. No banner, no throw —
+ * callers that need the fatal contract use ensureContainerRuntimeRunning.
+ */
+export function isContainerRuntimeUp(): boolean {
+  try {
+    execSync(`${CONTAINER_RUNTIME_BIN} info`, {
+      stdio: 'pipe',
+      timeout: 10000,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Ensure the container runtime is running, starting it if needed. */
 export function ensureContainerRuntimeRunning(): void {
   try {
